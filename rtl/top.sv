@@ -13,6 +13,7 @@ module top (
   logic mem_to_reg;
   logic mem_read;
   logic mem_write;
+  logic jump;
 
   logic [31:0] instr;
 
@@ -23,6 +24,11 @@ module top (
 
   logic [31:0] lsu_reg_out;
 
+  wire [6:0] opcode;
+  wire [2:0] funct3;
+  assign opcode = instr[6:0];
+  assign funct3 = instr[14:12];
+
   program_counter pc_inst (
       clk,
       rst,
@@ -30,8 +36,49 @@ module top (
       pc
   );
 
-  i_mem #(12, 32) im (
-      pc[11:0],
+  wire [31:0] pc_plus_4;
+  assign pc_plus_4 = pc + 4;
+
+  wire [31:0] pc_plus_offset;
+  assign pc_plus_offset = pc + imm_value;
+
+  `define beq 3'b000
+  `define bne 3'b001
+  `define blt 3'b100
+  `define bge 3'b101
+  `define bltu 3'b110
+  `define bgeu 3'b111
+
+  always_comb begin
+    if (opcode == cpu_defs::OP_JALR) pc_next = alu_out;
+    else if (opcode == cpu_defs::OP_JAL) pc_next = pc_plus_offset;
+    else if (opcode == cpu_defs::OP_B) begin
+      case (funct3)
+        `beq:
+        if (data1 == data2) pc_next = pc_plus_offset;
+        else pc_next = pc_plus_4;
+        `bne:
+        if (data1 != data2) pc_next = pc_plus_offset;
+        else pc_next = pc_plus_4;
+        `blt:
+        if ($signed(data1) < $signed(data2)) pc_next = pc_plus_offset;
+        else pc_next = pc_plus_4;
+        `bge:
+        if ($signed(data1) > $signed(data2)) pc_next = pc_plus_offset;
+        else pc_next = pc_plus_4;
+        `bltu:
+        if (data1 < data2) pc_next = pc_plus_offset;
+        else pc_next = pc_plus_4;
+        `bgeu:
+        if (data1 > data2) pc_next = pc_plus_offset;
+        else pc_next = pc_plus_4;
+      endcase
+    end else pc_next = pc_plus_4;
+
+  end
+
+  i_mem im (
+      pc,
       instr
   );
 
@@ -43,12 +90,22 @@ module top (
       .alu_op0(alu_op0),
       .mem_to_reg(mem_to_reg),
       .mem_write(mem_write),
-      .mem_read(mem_read)
+      .mem_read(mem_read),
+      .jump(jump)
   );
+
+  logic [31:0] rf_write_data;
+
+  // register file write data
+  always_comb begin
+    if (mem_to_reg) rf_write_data = lsu_reg_out;
+    else if (jump) rf_write_data = pc_plus_4;
+    else rf_write_data = alu_out;
+  end
 
   register_file rf (
       .clk(clk),
-      .dataW(mem_to_reg ? lsu_reg_out : alu_out),
+      .dataW(rf_write_data),
       .rs1(instr[19:15]),
       .rs2(instr[24:20]),
       .rd(instr[11:7]),
@@ -95,9 +152,5 @@ module top (
       .reg_in(data2),
       .reg_out(lsu_reg_out)
   );
-
-  always_comb begin
-    pc_next = pc + 32'd4;
-  end
 
 endmodule

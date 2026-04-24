@@ -6,9 +6,9 @@ module main_ctrl (
     alu_op0,
     mem_read,
     mem_to_reg,
-    mem_write
+    mem_write,
+    jump
 );
-
 
   always_comb begin
     alu_src = 0;
@@ -18,6 +18,7 @@ module main_ctrl (
     mem_read = 0;
     mem_to_reg = 0;
     mem_write = 0;
+    jump = 0;
 
     if (opcode == cpu_defs::OP_REG) begin
       alu_src = 0;
@@ -40,6 +41,11 @@ module main_ctrl (
       mem_read = 0;
       mem_to_reg = 0;
       mem_write = 1;
+      {alu_op1, alu_op0} = ctrl_defs::ALU_OP_LOAD_STORE;
+    end else if (opcode == cpu_defs::OP_JALR || opcode == cpu_defs::OP_JAL) begin
+      jump = 1;
+      reg_write = 1;
+      alu_src = 1;
       {alu_op1, alu_op0} = ctrl_defs::ALU_OP_LOAD_STORE;
     end
   end

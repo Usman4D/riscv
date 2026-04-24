@@ -2,6 +2,7 @@ module lsu (
     input  logic [ 3:0] func,
     input  logic [31:0] mem_in,
     input  logic [31:0] reg_in,
+    input  logic [ 1:0] byte_offset,
     output logic [31:0] reg_out,
     output logic [31:0] mem_out
 );

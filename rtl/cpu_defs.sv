@@ -11,4 +11,5 @@ package cpu_defs;
   parameter OP_ST = 7'b0100011;
   parameter OP_JALR = 7'b1100111;
   parameter OP_JAL = 7'b1101111;
+  parameter OP_B = 7'b1100011;
 endpackage

@@ -1,5 +1,5 @@
 SRC     = -f src.f
-COMPOPT = -sverilog -debug_access+all
+COMPOPT = -sverilog -debug_access+all -kdb
 SIMOPT  = 
 
 all: comp sim
