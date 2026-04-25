@@ -100,6 +100,8 @@ module top (
   always_comb begin
     if (mem_to_reg) rf_write_data = lsu_reg_out;
     else if (jump) rf_write_data = pc_plus_4;
+    else if (opcode == cpu_defs::OP_LUI) rf_write_data = imm_value;
+    else if (opcode == cpu_defs::OP_AUIPC) rf_write_data = pc_plus_offset;
     else rf_write_data = alu_out;
   end
 

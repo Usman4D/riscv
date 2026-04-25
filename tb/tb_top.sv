@@ -89,8 +89,8 @@ module tb_top;
     assert (dut.rf.mem[5] == 32'd24)
     else $fatal(1, "x5 failed");
 
-    // step for branch test instructions (beq/bne/blt/bge/bltu/bgeu)
-    instr_count = 40;
+    // step for branch/lui/auipc test instructions
+    instr_count = 42;
     repeat (instr_count) begin
       @(posedge clk);
     end
@@ -107,6 +107,10 @@ module tb_top;
     else $fatal(1, "x15 failed");
     assert (dut.rf.mem[18] == 32'd18)
     else $fatal(1, "x18 failed");
+    assert (dut.rf.mem[25] == 32'h12345000)
+    else $fatal(1, "x25 failed");
+    assert (dut.rf.mem[26] == 32'h0000112C)
+    else $fatal(1, "x26 failed");
 
     assert (dut.rf.mem[0] == 32'd0)
     else $fatal(1, "x0 must remain zero");

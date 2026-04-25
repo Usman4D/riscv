@@ -47,6 +47,8 @@ module main_ctrl (
       reg_write = 1;
       alu_src = 1;
       {alu_op1, alu_op0} = ctrl_defs::ALU_OP_LOAD_STORE;
+    end else if (opcode == cpu_defs::OP_LUI || opcode == cpu_defs::OP_AUIPC) begin
+      reg_write = 1;
     end
   end
 endmodule
