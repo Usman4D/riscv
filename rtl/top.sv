@@ -1,7 +1,46 @@
+import pipeline_reg_types::*;
+
 module top (
     input clk,
     rst
 );
+
+  if_id_t if_id_vector_in;
+  if_id_t if_id_vector_out;
+
+  if_id_t id_ex_vector_in;
+  if_id_t id_ex_vector_out;
+
+  if_id_t ex_mem_vector_in;
+  if_id_t ex_mem_vector_out;
+
+  if_id_t mem_wb_vector_in;
+  if_id_t mem_wb_vector_out;
+
+  pipeline_reg if_id_reg (
+      .clk(clk),
+      .rst(rst),
+      .data_in(if_id_vector_in),
+      .data_out(if_id_vector_out)
+  );
+  pipeline_reg id_ex_reg (
+      .clk(clk),
+      .rst(rst),
+      .data_in(id_ex_vector_in),
+      .data_out(id_ex_vector_out)
+  );
+  pipeline_reg ex_mem_reg (
+      .clk(clk),
+      .rst(rst),
+      .data_in(ex_mem_vector_in),
+      .data_out(ex_mem_vector_out)
+  );
+  pipeline_reg mem_wb_reg (
+      .clk(clk),
+      .rst(rst),
+      .data_in(mem_wb_vector_in),
+      .data_out(mem_wb_vector_out)
+  );
 
   logic [31:0] pc;
   logic [31:0] pc_next;
@@ -30,10 +69,10 @@ module top (
   assign funct3 = instr[14:12];
 
   program_counter pc_inst (
-      clk,
-      rst,
-      pc_next,
-      pc
+      .clk(clk),
+      .rst(rst),
+      .pc_next(pc_next),
+      .pc(pc)
   );
 
   wire [31:0] pc_plus_4;
@@ -78,9 +117,10 @@ module top (
   end
 
   i_mem im (
-      pc,
-      instr
+      .addr (pc),
+      .dataR(instr)
   );
+
 
   main_ctrl cu (
       .opcode(instr[6:0]),
