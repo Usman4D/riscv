@@ -14,14 +14,15 @@ module register_file #(
 );
   reg [DATA_WIDTH-1:0] mem[MEM_DEPTH];
 
-  always_ff @(posedge clk) begin
+  assign data1 = (rs1 == 'd0) ? 'd0 : mem[rs1];
+  assign data2 = (rs2 == 'd0) ? 'd0 : mem[rs2];
+
+  always_ff @(negedge clk) begin
     mem[0] = 32'd0;
     if (regWEn && (rd != 'd0)) begin
       mem[rd] <= dataW;
     end
   end
 
-  assign data1 = (rs1 == 'd0) ? 'd0 : mem[rs1];
-  assign data2 = (rs2 == 'd0) ? 'd0 : mem[rs2];
 
 endmodule
