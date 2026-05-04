@@ -1,0 +1,17 @@
+rtl/cpu_defs.sv
+rtl/pipeline_regs.sv
+rtl/pipeline_reg_types.sv
+rtl/alu.sv
+rtl/program_counter.sv
+rtl/imm_gen.sv
+rtl/main_ctrl.sv
+rtl/i_mem.sv
+rtl/register_file.sv
+rtl/alu_ctrl.sv
+rtl/data_mem.sv
+rtl/lsu.sv
+rtl/top.sv
+//tb/tb_imm_gen.sv
+//tb/tb_alu.sv
+//tb/tb_alu_ctrl.sv
+tb/tb_top.sv
