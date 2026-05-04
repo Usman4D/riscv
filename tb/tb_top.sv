@@ -17,13 +17,11 @@ module tb_top;
     $dumpvars(0, tb_top);
 
     clk = 1'b0;
-    rst = 1'b1;
+    rst = 1'b0;
 
     instr_count = 25;
 
-    #1;
-    rst = 1'b0;
-    #9;
+    #4;
     rst = 1'b1;
 
     repeat (instr_count) begin
@@ -31,6 +29,9 @@ module tb_top;
     end
     #1;
 
+    $display("-----------------------------------------");
+    $display(dut.rf.mem[2]);
+    $display("-----------------------------------------");
     assert (dut.rf.mem[1] == 32'd10)
     else $fatal(1, "x1 failed");
     assert (dut.rf.mem[2] == -32'sd10)

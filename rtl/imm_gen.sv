@@ -14,4 +14,5 @@ module imm_gen (
       default: imm = {{20{instr[31]}}, instr[31:20]};
     endcase
   end
+
 endmodule
