@@ -130,26 +130,27 @@ module top (
   );
 
   // Forwarding unit 1
-  logic [31:0] op1;
-  logic [31:0] op2;
+  logic [31:0] rs1_data_forwarded;
+  logic [31:0] rs2_data_forwarded;
 
   always_comb begin
     if (ex_mem_vector_out.rd == id_ex_vector_out.rs1 && ex_mem_vector_out.rd != 0)
-      op1 = ex_mem_vector_out.alu_out;
+      rs1_data_forwarded = ex_mem_vector_out.alu_out;
     else if (mem_wb_vector_out.rd == id_ex_vector_out.rs1 && mem_wb_vector_out.rd != 0)
-      op1 = mem_wb_vector_out.alu_out;
-    else op1 = id_ex_vector_out.rs1_data;
+      rs1_data_forwarded = mem_wb_vector_out.alu_out;
+    else rs1_data_forwarded = id_ex_vector_out.rs1_data;
 
-    if (id_ex_vector_out.ctrl.alu_src) op2 = id_ex_vector_out.imm_value;
-    else if (ex_mem_vector_out.rd == id_ex_vector_out.rs2) op2 = ex_mem_vector_out.alu_out;
-    else if (mem_wb_vector_out.rd == id_ex_vector_out.rs2) op2 = mem_wb_vector_out.alu_out;
-    else op2 = id_ex_vector_out.rs2_data;
+    if (ex_mem_vector_out.rd == id_ex_vector_out.rs2)
+      rs2_data_forwarded = ex_mem_vector_out.alu_out;
+    else if (mem_wb_vector_out.rd == id_ex_vector_out.rs2)
+      rs2_data_forwarded = mem_wb_vector_out.alu_out;
+    else rs2_data_forwarded = id_ex_vector_out.rs2_data;
   end
 
   alu alu_inst (
       .op (op),
-      .op1(op1),
-      .op2(op2),
+      .op1(rs1_data_forwarded),
+      .op2(id_ex_vector_out.ctrl.alu_src ? id_ex_vector_out.imm_value : rs2_data_forwarded),
       .out(alu_out)
   );
 
@@ -172,24 +173,22 @@ module top (
     else if (id_ex_vector_out.ctrl.branch) begin
       case (funct3)
         `beq:
-        if (id_ex_vector_out.rs1_data == id_ex_vector_out.rs2_data) pc_next = pc_plus_offset;
+        if (rs1_data_forwarded == rs2_data_forwarded) pc_next = pc_plus_offset;
         else pc_next = pc_plus_4;
         `bne:
-        if (id_ex_vector_out.rs1_data != id_ex_vector_out.rs2_data) pc_next = pc_plus_offset;
+        if (rs1_data_forwarded != rs2_data_forwarded) pc_next = pc_plus_offset;
         else pc_next = pc_plus_4;
         `blt:
-        if ($signed(id_ex_vector_out.rs1_data) < $signed(id_ex_vector_out.rs2_data))
-          pc_next = pc_plus_offset;
+        if ($signed(rs1_data_forwarded) < $signed(rs2_data_forwarded)) pc_next = pc_plus_offset;
         else pc_next = pc_plus_4;
         `bge:
-        if ($signed(id_ex_vector_out.rs1_data) > $signed(id_ex_vector_out.rs2_data))
-          pc_next = pc_plus_offset;
+        if ($signed(rs1_data_forwarded) > $signed(rs2_data_forwarded)) pc_next = pc_plus_offset;
         else pc_next = pc_plus_4;
         `bltu:
-        if (id_ex_vector_out.rs1_data < id_ex_vector_out.rs2_data) pc_next = pc_plus_offset;
+        if (rs1_data_forwarded < rs2_data_forwarded) pc_next = pc_plus_offset;
         else pc_next = pc_plus_4;
         `bgeu:
-        if (id_ex_vector_out.rs1_data > id_ex_vector_out.rs2_data) pc_next = pc_plus_offset;
+        if (rs1_data_forwarded > rs2_data_forwarded) pc_next = pc_plus_offset;
         else pc_next = pc_plus_4;
       endcase
     end else pc_next = pc_plus_4;

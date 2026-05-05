@@ -78,7 +78,7 @@ module tb_top;
     else $fatal(1, "x24 failed");
 
     // step for jump test Instructions
-    instr_count = 7;
+    instr_count = 8;
     repeat (instr_count) begin
       @(posedge clk);
     end
