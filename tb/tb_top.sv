@@ -19,9 +19,9 @@ module tb_top;
     clk = 1'b0;
     rst = 1'b0;
 
-    instr_count = 25;
+    instr_count = 29;
 
-    #4;
+    #10;
     rst = 1'b1;
 
     repeat (instr_count) begin

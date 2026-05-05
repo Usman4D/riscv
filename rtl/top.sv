@@ -130,16 +130,26 @@ module top (
   );
 
   // Forwarding unit 1
-  wire forward_a = 0;
-  wire forward_b = 0;
+  logic [31:0] op1;
+  logic [31:0] op2;
 
-  //assign forward_a = ex_mem_vector_out.rd == id_ex_vector_out.rs1;
-  //assign forward_b = ex_mem_vector_out.rd == id_ex_vector_out.rs2;
+  always_comb begin
+    if (ex_mem_vector_out.rd == id_ex_vector_out.rs1 && ex_mem_vector_out.rd != 0)
+      op1 = ex_mem_vector_out.alu_out;
+    else if (mem_wb_vector_out.rd == id_ex_vector_out.rs1 && mem_wb_vector_out.rd != 0)
+      op1 = mem_wb_vector_out.alu_out;
+    else op1 = id_ex_vector_out.rs1_data;
+
+    if (id_ex_vector_out.ctrl.alu_src) op2 = id_ex_vector_out.imm_value;
+    else if (ex_mem_vector_out.rd == id_ex_vector_out.rs2) op2 = ex_mem_vector_out.alu_out;
+    else if (mem_wb_vector_out.rd == id_ex_vector_out.rs2) op2 = mem_wb_vector_out.alu_out;
+    else op2 = id_ex_vector_out.rs2_data;
+  end
 
   alu alu_inst (
-      .op(op),
-      .op1(forward_a ? ex_mem_vector_out.alu_out : id_ex_vector_out.rs1_data),
-      .op2(id_ex_vector_out.ctrl.alu_src ? id_ex_vector_out.imm_value : (forward_b ? ex_mem_vector_out.alu_out : id_ex_vector_out.rs2_data)),
+      .op (op),
+      .op1(op1),
+      .op2(op2),
       .out(alu_out)
   );
 
@@ -191,6 +201,7 @@ module top (
   assign ex_mem_vector_in.alu_out = alu_out;
   assign ex_mem_vector_in.rd = id_ex_vector_out.rd;
   assign ex_mem_vector_in.rs2_data = id_ex_vector_out.rs2_data;
+  assign ex_mem_vector_in.rs2 = id_ex_vector_out.rs2;
   assign ex_mem_vector_in.imm_value = id_ex_vector_out.imm_value;
   assign ex_mem_vector_in.pc_plus_4 = pc_plus_4;
   assign ex_mem_vector_in.pc_plus_offset = pc_plus_offset;
@@ -200,6 +211,11 @@ module top (
   logic [31:0] dm_data_out;
   logic [31:0] lsu_data_out;
   logic [31:0] lsu_reg_out;
+
+  // Forwarding unit 2
+  wire forward_2a;
+
+  assign forward_2a = ex_mem_vector_out.rs2 == mem_wb_vector_out.rd;
 
   data_mem dm (
       .clk(clk),
@@ -213,7 +229,7 @@ module top (
       .func({ex_mem_vector_out.instr[5], ex_mem_vector_out.instr[14:12]}),
       .mem_in(dm_data_out),
       .mem_out(lsu_data_out),
-      .reg_in(ex_mem_vector_out.rs2_data),
+      .reg_in(forward_2a ? mem_wb_vector_out.alu_out : ex_mem_vector_out.rs2_data),
       .reg_out(lsu_reg_out)
   );
 

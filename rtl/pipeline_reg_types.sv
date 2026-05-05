@@ -34,6 +34,7 @@ package pipeline_reg_types;
     logic [31:0] pc_plus_offset;
     logic [31:0] imm_value;
     logic [31:0] pc_plus_4;
+    logic [4:0] rs2;
     logic [4:0] rd;
     ctrl_t ctrl;
   } ex_mem_t;
