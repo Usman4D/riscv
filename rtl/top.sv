@@ -4,12 +4,13 @@ module top (
     input clk,
     rst
 );
+  logic if_id_write_en = 1;
   // Pipeline Registers
-  if_id_t  if_id_vector_in;
-  if_id_t  if_id_vector_out;
+  if_id_t if_id_vector_in;
+  if_id_t if_id_vector_out;
 
-  id_ex_t  id_ex_vector_in;
-  id_ex_t  id_ex_vector_out;
+  id_ex_t id_ex_vector_in;
+  id_ex_t id_ex_vector_out;
 
   ex_mem_t ex_mem_vector_in;
   ex_mem_t ex_mem_vector_out;
@@ -22,6 +23,7 @@ module top (
   ) if_id_reg (
       .clk(clk),
       .rst(rst),
+      .write_enable(if_id_write_en),
       .data_in(if_id_vector_in),
       .data_out(if_id_vector_out)
   );
@@ -30,6 +32,7 @@ module top (
   ) id_ex_reg (
       .clk(clk),
       .rst(rst),
+      .write_enable(1),
       .data_in(id_ex_vector_in),
       .data_out(id_ex_vector_out)
   );
@@ -38,6 +41,7 @@ module top (
   ) ex_mem_reg (
       .clk(clk),
       .rst(rst),
+      .write_enable(1),
       .data_in(ex_mem_vector_in),
       .data_out(ex_mem_vector_out)
   );
@@ -46,6 +50,7 @@ module top (
   ) mem_wb_reg (
       .clk(clk),
       .rst(rst),
+      .write_enable(1),
       .data_in(mem_wb_vector_in),
       .data_out(mem_wb_vector_out)
   );
@@ -88,6 +93,7 @@ module top (
       .ctrl  (ctrl)
   );
 
+
   logic [31:0] rf_write_data;
 
   register_file rf (
@@ -107,10 +113,26 @@ module top (
       .imm(id_ex_vector_in.imm_value)
   );
 
+  always_comb begin
+    id_ex_vector_in.ctrl = ctrl;
+    // Hardware detection unit
+    if ((id_ex_vector_out.rd == if_id_vector_out.instr[19:15]
+	|| id_ex_vector_out.rd == if_id_vector_out.instr[24:20])
+	&& id_ex_vector_out.ctrl.mem_read) 
+  begin
+      write_enable = 0;
+      pc_write = 0;
+      id_ex_vector_out.ctrl.reg_write = 0;
+      id_ex_vector_out.ctrl.mem_write = 0;
+    end else begin
+      write_enable = 1;
+      pc_write = 1;
+    end
+  end
+
   //forward instruction to EX stage
   assign id_ex_vector_in.instr = if_id_vector_out.instr;
   assign id_ex_vector_in.pc = if_id_vector_out.pc;
-  assign id_ex_vector_in.ctrl = ctrl;
   assign id_ex_vector_in.rs1 = if_id_vector_out.instr[19:15];
   assign id_ex_vector_in.rs2 = if_id_vector_out.instr[24:20];
   assign id_ex_vector_in.rd = if_id_vector_out.instr[11:7];
@@ -199,6 +221,7 @@ module top (
   assign ex_mem_vector_in.ctrl = id_ex_vector_out.ctrl;
   assign ex_mem_vector_in.alu_out = alu_out;
   assign ex_mem_vector_in.rd = id_ex_vector_out.rd;
+  assign ex_mem_vector_in.pc = id_ex_vector_out.pc;
   assign ex_mem_vector_in.rs2_data = id_ex_vector_out.rs2_data;
   assign ex_mem_vector_in.rs2 = id_ex_vector_out.rs2;
   assign ex_mem_vector_in.imm_value = id_ex_vector_out.imm_value;
@@ -237,6 +260,7 @@ module top (
   assign mem_wb_vector_in.lsu_reg_out = lsu_reg_out;
   assign mem_wb_vector_in.alu_out = ex_mem_vector_out.alu_out;
   assign mem_wb_vector_in.rd = ex_mem_vector_out.rd;
+  assign mem_wb_vector_in.pc = ex_mem_vector_out.pc;
   assign mem_wb_vector_in.imm_value = ex_mem_vector_out.imm_value;
   assign mem_wb_vector_in.pc_plus_4 = ex_mem_vector_out.pc_plus_4;
   assign mem_wb_vector_in.pc_plus_offset = ex_mem_vector_out.pc_plus_offset;

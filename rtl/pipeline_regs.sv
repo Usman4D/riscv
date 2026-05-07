@@ -3,6 +3,7 @@ module pipeline_reg #(
 ) (
     input logic clk,
     input logic rst,
+    input logic write_en,
     input T data_in,
     output T data_out
 );
@@ -11,7 +12,7 @@ module pipeline_reg #(
   always @(posedge clk or negedge rst) begin
     if (!rst) begin
       data_r <= '0;
-    end else begin
+    end else if (write_en) begin
       data_r <= data_in;
     end
   end

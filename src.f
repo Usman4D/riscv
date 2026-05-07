@@ -10,6 +10,7 @@ rtl/register_file.sv
 rtl/alu_ctrl.sv
 rtl/data_mem.sv
 rtl/lsu.sv
+rtl/commit_if.sv
 rtl/top.sv
 //tb/tb_imm_gen.sv
 //tb/tb_alu.sv
