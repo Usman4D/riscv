@@ -27,6 +27,10 @@ module lsu (
       `sb:  mem_out = {{24{reg_in[7]}}, reg_in[7:0]};
       `sh:  mem_out = {{16{reg_in[7]}}, reg_in[15:0]};
       `sw:  mem_out = reg_in;
+      default: begin
+        reg_out = 32'd0;
+        mem_out = 32'd0;
+      end
     endcase
   end
 endmodule

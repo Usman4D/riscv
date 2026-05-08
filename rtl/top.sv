@@ -4,82 +4,199 @@ module top (
     input clk,
     rst
 );
+  logic if_id_write_en;
+  logic pc_write;
+  logic if_id_flush;
+  logic id_ex_flush;
+  logic branch_taken;
 
+  // Pipeline Registers
   if_id_t if_id_vector_in;
   if_id_t if_id_vector_out;
 
-  if_id_t id_ex_vector_in;
-  if_id_t id_ex_vector_out;
+  id_ex_t id_ex_vector_in;
+  id_ex_t id_ex_vector_out;
 
-  if_id_t ex_mem_vector_in;
-  if_id_t ex_mem_vector_out;
+  ex_mem_t ex_mem_vector_in;
+  ex_mem_t ex_mem_vector_out;
 
-  if_id_t mem_wb_vector_in;
-  if_id_t mem_wb_vector_out;
+  mem_wb_t mem_wb_vector_in;
+  mem_wb_t mem_wb_vector_out;
 
-  pipeline_reg if_id_reg (
+  pipeline_reg #(
+      .T(if_id_t)
+  ) if_id_reg (
       .clk(clk),
       .rst(rst),
+      .write_en(if_id_write_en),
+      .flush(if_id_flush),
       .data_in(if_id_vector_in),
       .data_out(if_id_vector_out)
   );
-  pipeline_reg id_ex_reg (
+  pipeline_reg #(
+      .T(id_ex_t)
+  ) id_ex_reg (
       .clk(clk),
       .rst(rst),
+      .write_en(1),
+      .flush(id_ex_flush),
       .data_in(id_ex_vector_in),
       .data_out(id_ex_vector_out)
   );
-  pipeline_reg ex_mem_reg (
+  pipeline_reg #(
+      .T(ex_mem_t)
+  ) ex_mem_reg (
       .clk(clk),
       .rst(rst),
+      .write_en(1),
       .data_in(ex_mem_vector_in),
       .data_out(ex_mem_vector_out)
   );
-  pipeline_reg mem_wb_reg (
+  pipeline_reg #(
+      .T(mem_wb_t)
+  ) mem_wb_reg (
       .clk(clk),
       .rst(rst),
+      .write_en(1),
       .data_in(mem_wb_vector_in),
       .data_out(mem_wb_vector_out)
   );
 
-  logic [31:0] pc;
   logic [31:0] pc_next;
-
-  logic reg_write;
-  logic alu_src;
-  logic alu_op1;
-  logic alu_op0;
-  logic mem_to_reg;
-  logic mem_read;
-  logic mem_write;
-  logic jump;
-
   logic [31:0] instr;
-
-  logic [31:0] data1;
-  logic [31:0] data2;
   logic [31:0] imm_value;
-  logic [31:0] alu_out;
+  wire  [ 6:0] opcode;
+  wire  [ 2:0] funct3;
 
-  logic [31:0] lsu_reg_out;
-
-  wire [6:0] opcode;
-  wire [2:0] funct3;
   assign opcode = instr[6:0];
-  assign funct3 = instr[14:12];
+
+  // IF stage begin--------------------------------------------------------
+
+  logic [31:0] pc;
 
   program_counter pc_inst (
       .clk(clk),
       .rst(rst),
-      .pc_next(pc_next),
-      .pc(pc)
+      .pc_write(pc_write),
+      .pc(pc),
+      .pc_next((id_ex_vector_out.ctrl.jump || id_ex_vector_out.ctrl.branch) ? pc_next : pc + 4)
+  );
+
+  i_mem im (
+      .addr (pc),
+      .dataR(if_id_vector_in.instr)
+  );
+
+  assign if_id_vector_in.pc = pc;
+
+  // ID stage start------------------------------------------------------
+
+  logic [31:0] data1;
+  logic [31:0] data2;
+  ctrl_t ctrl;
+
+  main_ctrl cu (
+      .opcode(if_id_vector_out.instr[6:0]),
+      .ctrl  (ctrl)
+  );
+
+  logic [31:0] rf_write_data;
+
+  register_file rf (
+      .clk(clk),
+      .dataW(rf_write_data),
+      .rs1(if_id_vector_out.instr[19:15]),
+      .rs2(if_id_vector_out.instr[24:20]),
+      .rd(mem_wb_vector_out.rd),
+      .regWEn(mem_wb_vector_out.ctrl.reg_write),
+      .data1(data1),
+      .data2(data2)
+  );
+
+  imm_gen imm (
+      .opcode(if_id_vector_out.instr[6:0]),
+      .instr(if_id_vector_out.instr),
+      .imm(id_ex_vector_in.imm_value)
+  );
+
+  always_comb begin
+    // Hardware detection unit
+    id_ex_vector_in.ctrl = ctrl;
+    if ((id_ex_vector_out.rd == if_id_vector_out.instr[19:15]
+    || id_ex_vector_out.rd == if_id_vector_out.instr[24:20])
+    && id_ex_vector_out.ctrl.mem_read) 
+  begin
+      if_id_write_en = 0;
+      pc_write = 0;
+      id_ex_vector_in.ctrl.reg_write = 0;
+      id_ex_vector_in.ctrl.mem_write = 0;
+    end else begin
+      if_id_write_en = 1;
+      pc_write = 1;
+    end
+  end
+
+  always_comb begin
+    if (id_ex_vector_out.ctrl.jump || (id_ex_vector_out.ctrl.branch && branch_taken)) begin
+      if_id_flush = 1;
+      id_ex_flush = 1;
+    end else begin
+      if_id_flush = 0;
+      id_ex_flush = 0;
+    end
+  end
+
+  //forward instruction to EX stage
+  assign id_ex_vector_in.instr = if_id_vector_out.instr;
+  assign id_ex_vector_in.pc = if_id_vector_out.pc;
+  assign id_ex_vector_in.rs1 = if_id_vector_out.instr[19:15];
+  assign id_ex_vector_in.rs2 = if_id_vector_out.instr[24:20];
+  assign id_ex_vector_in.rd = if_id_vector_out.instr[11:7];
+  assign id_ex_vector_in.rs1_data = data1;
+  assign id_ex_vector_in.rs2_data = data2;
+
+  // EX stage begin--------------------------------------------------------
+
+  logic [ 3:0] op;
+  logic [31:0] alu_out;
+
+  alu_ctrl ac (
+      {id_ex_vector_out.ctrl.alu_op1, id_ex_vector_out.ctrl.alu_op0},
+      id_ex_vector_out.instr[31:25],
+      id_ex_vector_out.instr[14:12],
+      op
+  );
+
+  // Forwarding unit 1
+  logic [31:0] rs1_data_forwarded;
+  logic [31:0] rs2_data_forwarded;
+
+  always_comb begin
+    if (ex_mem_vector_out.rd == id_ex_vector_out.rs1 && ex_mem_vector_out.rd != 0)
+      rs1_data_forwarded = ex_mem_vector_out.alu_out;
+    else if (mem_wb_vector_out.rd == id_ex_vector_out.rs1 && mem_wb_vector_out.rd != 0)
+      rs1_data_forwarded = mem_wb_vector_out.alu_out;
+    else rs1_data_forwarded = id_ex_vector_out.rs1_data;
+
+    if (ex_mem_vector_out.rd == id_ex_vector_out.rs2)
+      rs2_data_forwarded = ex_mem_vector_out.alu_out;
+    else if (mem_wb_vector_out.rd == id_ex_vector_out.rs2)
+      rs2_data_forwarded = mem_wb_vector_out.alu_out;
+    else rs2_data_forwarded = id_ex_vector_out.rs2_data;
+  end
+
+  alu alu_inst (
+      .op (op),
+      .op1(rs1_data_forwarded),
+      .op2(id_ex_vector_out.ctrl.alu_src ? id_ex_vector_out.imm_value : rs2_data_forwarded),
+      .out(alu_out)
   );
 
   wire [31:0] pc_plus_4;
-  assign pc_plus_4 = pc + 4;
+  assign pc_plus_4 = id_ex_vector_out.pc + 4;
 
   wire [31:0] pc_plus_offset;
-  assign pc_plus_offset = pc + imm_value;
+  assign pc_plus_offset = id_ex_vector_out.pc + id_ex_vector_out.imm_value;
 
   `define beq 3'b000
   `define bne 3'b001
@@ -88,111 +205,121 @@ module top (
   `define bltu 3'b110
   `define bgeu 3'b111
 
+
+  assign funct3 = id_ex_vector_out.instr[14:12];
   always_comb begin
-    if (opcode == cpu_defs::OP_JALR) pc_next = alu_out;
-    else if (opcode == cpu_defs::OP_JAL) pc_next = pc_plus_offset;
-    else if (opcode == cpu_defs::OP_B) begin
+    branch_taken = 0;
+    if (id_ex_vector_out.instr[6:0] == cpu_defs::OP_JALR) pc_next = alu_out;
+    else if (id_ex_vector_out.instr[6:0] == cpu_defs::OP_JAL) pc_next = pc_plus_offset;
+    else if (id_ex_vector_out.ctrl.branch) begin
       case (funct3)
         `beq:
-        if (data1 == data2) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if (rs1_data_forwarded == rs2_data_forwarded) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
         `bne:
-        if (data1 != data2) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if (rs1_data_forwarded != rs2_data_forwarded) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
         `blt:
-        if ($signed(data1) < $signed(data2)) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if ($signed(rs1_data_forwarded) < $signed(rs2_data_forwarded)) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
         `bge:
-        if ($signed(data1) > $signed(data2)) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if ($signed(rs1_data_forwarded) > $signed(rs2_data_forwarded)) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          branch_taken = 0;
+          pc_next = pc_plus_4;
+        end
         `bltu:
-        if (data1 < data2) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if (rs1_data_forwarded < rs2_data_forwarded) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
         `bgeu:
-        if (data1 > data2) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if (rs1_data_forwarded > rs2_data_forwarded) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
       endcase
     end else pc_next = pc_plus_4;
-
   end
 
-  i_mem im (
-      .addr (pc),
-      .dataR(instr)
-  );
+  assign ex_mem_vector_in.instr = id_ex_vector_out.instr;
+  assign ex_mem_vector_in.ctrl = id_ex_vector_out.ctrl;
+  assign ex_mem_vector_in.alu_out = alu_out;
+  assign ex_mem_vector_in.rd = id_ex_vector_out.rd;
+  assign ex_mem_vector_in.pc = id_ex_vector_out.pc;
+  assign ex_mem_vector_in.rs2_data = id_ex_vector_out.rs2_data;
+  assign ex_mem_vector_in.rs2 = id_ex_vector_out.rs2;
+  assign ex_mem_vector_in.imm_value = id_ex_vector_out.imm_value;
+  assign ex_mem_vector_in.pc_plus_4 = pc_plus_4;
+  assign ex_mem_vector_in.pc_plus_offset = pc_plus_offset;
 
-
-  main_ctrl cu (
-      .opcode(instr[6:0]),
-      .alu_src(alu_src),
-      .reg_write(reg_write),
-      .alu_op1(alu_op1),
-      .alu_op0(alu_op0),
-      .mem_to_reg(mem_to_reg),
-      .mem_write(mem_write),
-      .mem_read(mem_read),
-      .jump(jump)
-  );
-
-  logic [31:0] rf_write_data;
-
-  // register file write data
-  always_comb begin
-    if (mem_to_reg) rf_write_data = lsu_reg_out;
-    else if (jump) rf_write_data = pc_plus_4;
-    else if (opcode == cpu_defs::OP_LUI) rf_write_data = imm_value;
-    else if (opcode == cpu_defs::OP_AUIPC) rf_write_data = pc_plus_offset;
-    else rf_write_data = alu_out;
-  end
-
-  register_file rf (
-      .clk(clk),
-      .dataW(rf_write_data),
-      .rs1(instr[19:15]),
-      .rs2(instr[24:20]),
-      .rd(instr[11:7]),
-      .regWEn(reg_write),
-      .data1(data1),
-      .data2(data2)
-  );
-
-  imm_gen imm (
-      .opcode(instr[6:0]),
-      .instr(instr),
-      .imm(imm_value)
-  );
-
-  logic [3:0] op;
-  alu_ctrl ac (
-      {alu_op1, alu_op0},
-      instr[31:25],
-      instr[14:12],
-      op
-  );
-
-  alu alu_inst (
-      .op (op),
-      .op1(data1),
-      .op2((alu_src ? imm_value : data2)),
-      .out(alu_out)
-  );
+  // MEM stage begin--------------------------------------------------------
 
   logic [31:0] dm_data_out;
   logic [31:0] lsu_data_out;
+  logic [31:0] lsu_reg_out;
+
+  // Forwarding unit 2
+  wire forward_2a;
+
+  assign forward_2a = ex_mem_vector_out.rs2 == mem_wb_vector_out.rd;
+
   data_mem dm (
       .clk(clk),
       .data_in(lsu_data_out),
-      .wr(mem_write),
-      .addr(alu_out),
+      .wr(ex_mem_vector_out.ctrl.mem_write),
+      .addr(ex_mem_vector_out.alu_out),
       .data_out(dm_data_out)
   );
 
   lsu lsu_inst (
-      .func({instr[5], instr[14:12]}),
+      .func({ex_mem_vector_out.instr[5], ex_mem_vector_out.instr[14:12]}),
       .mem_in(dm_data_out),
       .mem_out(lsu_data_out),
-      .reg_in(data2),
+      .reg_in(forward_2a ? mem_wb_vector_out.alu_out : ex_mem_vector_out.rs2_data),
       .reg_out(lsu_reg_out)
   );
+
+  assign mem_wb_vector_in.instr = ex_mem_vector_out.instr;
+  assign mem_wb_vector_in.ctrl = ex_mem_vector_out.ctrl;
+  assign mem_wb_vector_in.lsu_reg_out = lsu_reg_out;
+  assign mem_wb_vector_in.alu_out = ex_mem_vector_out.alu_out;
+  assign mem_wb_vector_in.rd = ex_mem_vector_out.rd;
+  assign mem_wb_vector_in.pc = ex_mem_vector_out.pc;
+  assign mem_wb_vector_in.imm_value = ex_mem_vector_out.imm_value;
+  assign mem_wb_vector_in.pc_plus_4 = ex_mem_vector_out.pc_plus_4;
+  assign mem_wb_vector_in.pc_plus_offset = ex_mem_vector_out.pc_plus_offset;
+
+  // WB stage start--------------------------------------------------------
+
+  // register file write data
+  assign opcode = mem_wb_vector_in.instr[6:0];
+  always_comb begin
+    if (mem_wb_vector_out.ctrl.mem_to_reg) rf_write_data = mem_wb_vector_out.lsu_reg_out;
+    else if (mem_wb_vector_out.ctrl.jump) rf_write_data = mem_wb_vector_out.pc_plus_4;
+    else if (mem_wb_vector_out.instr[6:0] == cpu_defs::OP_LUI)
+      rf_write_data = mem_wb_vector_out.imm_value;
+    else if (mem_wb_vector_out.instr[6:0] == cpu_defs::OP_AUIPC)
+      rf_write_data = mem_wb_vector_out.pc_plus_offset;
+    else rf_write_data = mem_wb_vector_out.alu_out;
+  end
 
 endmodule
