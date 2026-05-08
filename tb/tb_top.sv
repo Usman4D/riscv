@@ -2,7 +2,6 @@ module tb_top;
 
   logic clk;
   logic rst;
-  int   i;
   int   instr_count;
 
   commit_if commit_if (clk);
@@ -15,34 +14,35 @@ module tb_top;
   always #5 clk = ~clk;
 
   always @(posedge clk) begin
-    if (1) begin
-      $display("PC=%h RD=%0d DATA=%h", commit_if.pc, commit_if.rd, commit_if.data);
+    if (commit_if.valid) begin
+      $display("PC=%h RD=%0d DATA=%0d", commit_if.pc, commit_if.rd, commit_if.data);
     end
   end
 
   initial begin
-    //$dumpfile("wave.vcd");
-    //$dumpvars(0, tb_top);
+    $dumpfile("wave.vcd");
+    $dumpvars(0, tb_top);
+
     clk = 1'b0;
     rst = 1'b0;
 
-    instr_count = 1000;
+    instr_count = 100;
 
     #10;
     rst = 1'b1;
 
     repeat (instr_count) begin
       @(posedge clk);
-      assign commit_if.valid = 1;
+      assign commit_if.valid = dut.mem_wb_vector_out.ctrl.reg_write;
       assign commit_if.pc = dut.mem_wb_vector_out.pc;
       assign commit_if.rd = dut.mem_wb_vector_out.rd;
       assign commit_if.data = dut.rf_write_data;
     end
     #1;
 
-    $display("-----------------------------------------");
-    $display(dut.rf.mem[2]);
-    $display("-----------------------------------------");
+    //$display("-----------------------------------------");
+    //$display(dut.rf.mem[2]);
+    //$display("-----------------------------------------");
     //assert (dut.rf.mem[1] == 32'd10)
     //else $fatal(1, "x1 failed");
     //assert (dut.rf.mem[2] == -32'sd10)
@@ -88,7 +88,7 @@ module tb_top;
     //assert (dut.rf.mem[24] == 32'd907)
     //else $fatal(1, "x24 failed");
 
-    // step for jump test Instructions
+    //// step for jump test Instructions
     //instr_count = 8;
     //repeat (instr_count) begin
     //  @(posedge clk);
@@ -101,7 +101,7 @@ module tb_top;
     //assert (dut.rf.mem[5] == 32'd24)
     //else $fatal(1, "x5 failed");
 
-    // step for branch/lui/auipc test instructions
+    //// step for branch/lui/auipc test instructions
     //instr_count = 42;
     //repeat (instr_count) begin
     //  @(posedge clk);
@@ -133,8 +133,8 @@ module tb_top;
   end
 
   initial begin
-    $shm_open("waves.shm");
-    $shm_probe("AS");
+    //$shm_open("waves.shm");
+    //$shm_probe("AS");
   end
 
 endmodule

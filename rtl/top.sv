@@ -4,7 +4,12 @@ module top (
     input clk,
     rst
 );
-  logic if_id_write_en = 1;
+  logic if_id_write_en;
+  logic pc_write;
+  logic if_id_flush;
+  logic id_ex_flush;
+  logic branch_taken;
+
   // Pipeline Registers
   if_id_t if_id_vector_in;
   if_id_t if_id_vector_out;
@@ -23,7 +28,8 @@ module top (
   ) if_id_reg (
       .clk(clk),
       .rst(rst),
-      .write_enable(if_id_write_en),
+      .write_en(if_id_write_en),
+      .flush(if_id_flush),
       .data_in(if_id_vector_in),
       .data_out(if_id_vector_out)
   );
@@ -32,7 +38,8 @@ module top (
   ) id_ex_reg (
       .clk(clk),
       .rst(rst),
-      .write_enable(1),
+      .write_en(1),
+      .flush(id_ex_flush),
       .data_in(id_ex_vector_in),
       .data_out(id_ex_vector_out)
   );
@@ -41,7 +48,7 @@ module top (
   ) ex_mem_reg (
       .clk(clk),
       .rst(rst),
-      .write_enable(1),
+      .write_en(1),
       .data_in(ex_mem_vector_in),
       .data_out(ex_mem_vector_out)
   );
@@ -50,7 +57,7 @@ module top (
   ) mem_wb_reg (
       .clk(clk),
       .rst(rst),
-      .write_enable(1),
+      .write_en(1),
       .data_in(mem_wb_vector_in),
       .data_out(mem_wb_vector_out)
   );
@@ -62,7 +69,6 @@ module top (
   wire  [ 2:0] funct3;
 
   assign opcode = instr[6:0];
-  assign funct3 = instr[14:12];
 
   // IF stage begin--------------------------------------------------------
 
@@ -71,6 +77,7 @@ module top (
   program_counter pc_inst (
       .clk(clk),
       .rst(rst),
+      .pc_write(pc_write),
       .pc(pc),
       .pc_next((id_ex_vector_out.ctrl.jump || id_ex_vector_out.ctrl.branch) ? pc_next : pc + 4)
   );
@@ -93,7 +100,6 @@ module top (
       .ctrl  (ctrl)
   );
 
-
   logic [31:0] rf_write_data;
 
   register_file rf (
@@ -114,19 +120,29 @@ module top (
   );
 
   always_comb begin
-    id_ex_vector_in.ctrl = ctrl;
     // Hardware detection unit
+    id_ex_vector_in.ctrl = ctrl;
     if ((id_ex_vector_out.rd == if_id_vector_out.instr[19:15]
-	|| id_ex_vector_out.rd == if_id_vector_out.instr[24:20])
-	&& id_ex_vector_out.ctrl.mem_read) 
+    || id_ex_vector_out.rd == if_id_vector_out.instr[24:20])
+    && id_ex_vector_out.ctrl.mem_read) 
   begin
-      write_enable = 0;
+      if_id_write_en = 0;
       pc_write = 0;
-      id_ex_vector_out.ctrl.reg_write = 0;
-      id_ex_vector_out.ctrl.mem_write = 0;
+      id_ex_vector_in.ctrl.reg_write = 0;
+      id_ex_vector_in.ctrl.mem_write = 0;
     end else begin
-      write_enable = 1;
+      if_id_write_en = 1;
       pc_write = 1;
+    end
+  end
+
+  always_comb begin
+    if (id_ex_vector_out.ctrl.jump || (id_ex_vector_out.ctrl.branch && branch_taken)) begin
+      if_id_flush = 1;
+      id_ex_flush = 1;
+    end else begin
+      if_id_flush = 0;
+      id_ex_flush = 0;
     end
   end
 
@@ -189,32 +205,59 @@ module top (
   `define bltu 3'b110
   `define bgeu 3'b111
 
+
+  assign funct3 = id_ex_vector_out.instr[14:12];
   always_comb begin
+    branch_taken = 0;
     if (id_ex_vector_out.instr[6:0] == cpu_defs::OP_JALR) pc_next = alu_out;
     else if (id_ex_vector_out.instr[6:0] == cpu_defs::OP_JAL) pc_next = pc_plus_offset;
     else if (id_ex_vector_out.ctrl.branch) begin
       case (funct3)
         `beq:
-        if (rs1_data_forwarded == rs2_data_forwarded) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if (rs1_data_forwarded == rs2_data_forwarded) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
         `bne:
-        if (rs1_data_forwarded != rs2_data_forwarded) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if (rs1_data_forwarded != rs2_data_forwarded) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
         `blt:
-        if ($signed(rs1_data_forwarded) < $signed(rs2_data_forwarded)) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if ($signed(rs1_data_forwarded) < $signed(rs2_data_forwarded)) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
         `bge:
-        if ($signed(rs1_data_forwarded) > $signed(rs2_data_forwarded)) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if ($signed(rs1_data_forwarded) > $signed(rs2_data_forwarded)) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          branch_taken = 0;
+          pc_next = pc_plus_4;
+        end
         `bltu:
-        if (rs1_data_forwarded < rs2_data_forwarded) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if (rs1_data_forwarded < rs2_data_forwarded) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
         `bgeu:
-        if (rs1_data_forwarded > rs2_data_forwarded) pc_next = pc_plus_offset;
-        else pc_next = pc_plus_4;
+        if (rs1_data_forwarded > rs2_data_forwarded) begin
+          branch_taken = 1;
+          pc_next = pc_plus_offset;
+        end else begin
+          pc_next = pc_plus_4;
+        end
       endcase
     end else pc_next = pc_plus_4;
-
   end
 
   assign ex_mem_vector_in.instr = id_ex_vector_out.instr;
