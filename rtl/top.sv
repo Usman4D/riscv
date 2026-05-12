@@ -175,13 +175,12 @@ module top (
     if (ex_mem_vector_out.rd == id_ex_vector_out.rs1 && ex_mem_vector_out.rd != 0)
       rs1_data_forwarded = ex_mem_vector_out.alu_out;
     else if (mem_wb_vector_out.rd == id_ex_vector_out.rs1 && mem_wb_vector_out.rd != 0)
-      rs1_data_forwarded = mem_wb_vector_out.alu_out;
+      rs1_data_forwarded = rf_write_data;
     else rs1_data_forwarded = id_ex_vector_out.rs1_data;
 
     if (ex_mem_vector_out.rd == id_ex_vector_out.rs2)
       rs2_data_forwarded = ex_mem_vector_out.alu_out;
-    else if (mem_wb_vector_out.rd == id_ex_vector_out.rs2)
-      rs2_data_forwarded = mem_wb_vector_out.alu_out;
+    else if (mem_wb_vector_out.rd == id_ex_vector_out.rs2) rs2_data_forwarded = rf_write_data;
     else rs2_data_forwarded = id_ex_vector_out.rs2_data;
   end
 
